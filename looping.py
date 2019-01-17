@@ -2,9 +2,10 @@ import numpy as np
 import pylab as pl
 
 L = 0.5 # in m
-M_m = 3
-mu = 0.1
-mu_s = 0.8
+M_m = 4
+mu = np.log(81/52)/np.pi
+mu_s = np.log(99/52)/np.pi
+print("mu: %.2f, mu_s: %.2f"%(mu, mu_s))
 r = 0.01# in m
 
 g = 9.80665
@@ -12,15 +13,25 @@ g = 9.80665
 theta_0 = [np.pi/2, 0]
 s_0 = [L*0.99-r*theta_0[0], 0]
 steps_per_sec = 100000
+fps = 1000
 
 def loop_pen(state, moving):
     theta = state[:2]
     s = state[2:4]
     if moving == 'CCW':
         theta_dd = (g*np.sin(theta[0]) - r*theta[1]*theta[1] - 2*s[1]*theta[1])/s[0]
-        s_dd = (-g*np.cos(theta[0])+s[0]*theta[1]*theta[1]-r*theta_dd-M_m*np.exp(-mu*theta[0])*(r*theta_dd+g))/(1+M_m)
+        s_dd = (-g*np.cos(theta[0])+s[0]*theta[1]*theta[1]-r*theta_dd-M_m*np.exp(-mu*theta[0])*(r*theta_dd+g)) \
+            /(1+M_m * np.exp(-mu*theta[0]))
         T1_m = -s_dd + s[0]*theta[1]*theta[1] - g*np.cos(theta[0])
         if s[1] + r*theta[1] >= 0:
+            moving = 'STOP'
+        return moving, np.array([theta[1], theta_dd, s[1], s_dd])
+    elif moving == 'CW':
+        theta_dd = (g * np.sin(theta[0]) - r * theta[1] * theta[1] - 2 * s[1] * theta[1]) / s[0]
+        s_dd = (-g * np.cos(theta[0]) + s[0] * theta[1] * theta[1] - r * theta_dd - M_m * np.exp(mu * theta[0]) * (
+                    r * theta_dd + g)) / (1 + M_m * np.exp(mu * theta[0]))
+        T1_m = -s_dd + s[0] * theta[1] * theta[1] - g * np.cos(theta[0])
+        if s[1] + r * theta[1] <= 0:
             moving = 'STOP'
         return moving, np.array([theta[1], theta_dd, s[1], s_dd])
     elif moving == 'STOP':
@@ -30,7 +41,7 @@ def loop_pen(state, moving):
         T1_m_min = M_m * g * np.exp(-mu_s * theta[0])
         T1_m_max = M_m * g * np.exp(mu_s * theta[0])
         T1_m = s[0]*theta[1]*theta[1]-g*np.cos(theta[0])
-        if T1_m < -0.1:
+        if T1_m < -0.01:
             # moving = 'ERROR'
             print("Error! T1_m = %.2f"%T1_m)
         if T1_m <= T1_m_min:
@@ -50,11 +61,14 @@ def RK2(f,y0):
     t = 0
     moving = 'STOP'
     while Y[-1][2] > 0.001 and Y[-1][0] >= 0:
-        if t > 5 or moving == 'ERROR' or moving == 'CW':
+        if t > 5 or moving == 'ERROR':
             print('quit!')
             break
         moving, y_d_rk2 = f(y, moving)
         y_rk2 = y + h * 0.5 * y_d_rk2
+        if moving == 'ERROR':
+            print('quit!')
+            break
         moving, y_d = f(y_rk2, moving)
         y = y + h * y_d
         Y.append(y)
@@ -64,7 +78,8 @@ def RK2(f,y0):
 
 y_0 = np.array(theta_0 + s_0)
 a, t = RK2(loop_pen, np.array(theta_0 + s_0))
-a = a[::100]
+a = a[::steps_per_sec//fps]
+t = t[::steps_per_sec//fps]
 theta = a[:,0]
 s = a[:,2]
 X1 = r*np.cos(theta)-s*np.sin(theta)
@@ -80,7 +95,6 @@ line1, = ax.plot(X1[:1],Y1[:1],'g-')
 line2, = ax.plot(X2[:1], Y2[:1], 'b-')
 dot1, = ax.plot(X1[:1],Y1[:1],'g.')
 dot2, = ax.plot(X2[:1], Y2[:1], 'b.')
-
 
 def init():
     c = np.linspace(0, 2 * np.pi, 100)
@@ -108,11 +122,31 @@ def animate(i):
     return line1, line2, dot1, dot2
 
 
-plt.axis('equal')
 init()
-xl = plt.xlim()
-yl = plt.ylim()
-plt.xlim((xl[0],-xl[0]))
-plt.ylim((yl[0],-yl[0]))
-ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1, blit=True)
+plt.axis('equal')
+ax.relim()
+xl = ax.get_xlim()
+yl = ax.get_ylim()
+ax.set_xlim((xl[0],-xl[0]))
+ax.set_ylim((yl[0],-yl[0]))
+
+fig2 = plt.figure('Graphs')
+ax_s_t = fig2.add_subplot(321)
+ax_t_t = fig2.add_subplot(322)
+ax_h_t = fig2.add_subplot(323)
+ax_w_t = fig2.add_subplot(324)
+ax_hd_t = fig2.add_subplot(325)
+ax_s_t.set_title("S-t")
+ax_h_t.set_title("Y2-t")
+ax_t_t.set_title("Theta-t")
+ax_w_t.set_title("Omega-t")
+ax_hd_t.set_title("v-t")
+ax_s_t.plot(t, s, 'C1-')
+ax_t_t.plot(t, theta, 'C1-')
+ax_h_t.plot(t, Y2, 'C1-')
+ax_w_t.plot(t, a[:,1], 'C1-')
+ax_hd_t.plot(t, a[:,3]+r*a[:,1], 'C1-')
+fig2.tight_layout()
+
+ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1000//fps, blit=False)
 plt.show()
