@@ -6,14 +6,14 @@ M_m = 4
 mu = np.log(81/52)/np.pi
 mu_s = np.log(99/52)/np.pi
 print("mu: %.2f, mu_s: %.2f"%(mu, mu_s))
-r = 0.01# in m
+r = 0.023/2# in m
 
 g = 9.80665
 
 theta_0 = [np.pi/2, 0]
 s_0 = [L*0.99-r*theta_0[0], 0]
 steps_per_sec = 100000
-fps = 1000
+fps = 100
 
 def loop_pen(state, moving):
     theta = state[:2]
@@ -47,7 +47,6 @@ def loop_pen(state, moving):
         if T1_m <= T1_m_min:
             moving = 'CCW'
         elif T1_m >= T1_m_max:
-            print('Amazing!!!')
             moving = 'CW'
             # TODO special analysis
         return moving, np.array([theta[1], theta_dd, s_d, s_dd])
@@ -57,6 +56,7 @@ def RK2(f,y0):
     # t = np.linspace(a,b,step)
     h=1/steps_per_sec
     Y=[y0]
+    states = [0]
     y=y0
     t = 0
     moving = 'STOP'
@@ -72,14 +72,21 @@ def RK2(f,y0):
         moving, y_d = f(y_rk2, moving)
         y = y + h * y_d
         Y.append(y)
+        if moving == 'STOP':
+            states.append(0)
+        elif moving == 'CCW':
+            states.append(-1)
+        elif moving == 'CW':
+            states.append(1)
         t += h
-    return np.array(Y), np.linspace(0, t, len(Y))
+    return np.array(Y), np.linspace(0, t, len(Y)), np.array(states)
 
 
-y_0 = np.array(theta_0 + s_0)
-a, t = RK2(loop_pen, np.array(theta_0 + s_0))
+# y_0 = np.array(theta_0 + s_0)
+a, t, states = RK2(loop_pen, np.array(theta_0 + s_0))
 a = a[::steps_per_sec//fps]
 t = t[::steps_per_sec//fps]
+states = states[::steps_per_sec//fps]
 theta = a[:,0]
 s = a[:,2]
 X1 = r*np.cos(theta)-s*np.sin(theta)
@@ -90,15 +97,17 @@ Y2 = (s+r*theta)-L
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 fig = plt.figure('Looping Pendulum')
+fig.patch.set_alpha(0.)
 ax = fig.gca()
 line1, = ax.plot(X1[:1],Y1[:1],'g-')
 line2, = ax.plot(X2[:1], Y2[:1], 'b-')
 dot1, = ax.plot(X1[:1],Y1[:1],'g.')
 dot2, = ax.plot(X2[:1], Y2[:1], 'b.')
+c = np.linspace(0, 2 * np.pi, 100)
+circle, = ax.plot(r * np.cos(c), r * np.sin(c), 'r-')
+
 
 def init():
-    c = np.linspace(0, 2 * np.pi, 100)
-    ax.plot(r * np.cos(c), r * np.sin(c), 'r-')
     line1.set_xdata([X1[0],r*np.cos(a[0,0])])
     line1.set_ydata([Y1[0],r*np.sin(a[0,0])])
     line2.set_xdata([X2[0],r])
@@ -107,19 +116,19 @@ def init():
     dot1.set_ydata([Y1[0]])
     dot2.set_xdata([X2[0]])
     dot2.set_ydata([Y2[0]])
-    return line1, line2, dot1, dot2
+    return line1, line2, dot1, dot2, circle
 
 
 def animate(i):
-    line1.set_xdata([X1[i], r * np.cos(theta[i])])
+    line1.set_xdata([-X1[i], -r * np.cos(theta[i])])
     line1.set_ydata([Y1[i], r * np.sin(theta[i])])
-    line2.set_xdata([X2[i], r])
+    line2.set_xdata([-X2[i], -r])
     line2.set_ydata([Y2[i], 0])
-    dot1.set_xdata([X1[i]])
+    dot1.set_xdata([-X1[i]])
     dot1.set_ydata([Y1[i]])
-    dot2.set_xdata([X2[i]])
+    dot2.set_xdata([-X2[i]])
     dot2.set_ydata([Y2[i]])
-    return line1, line2, dot1, dot2
+    return line1, line2, dot1, dot2, circle
 
 
 init()
@@ -136,17 +145,28 @@ ax_t_t = fig2.add_subplot(322)
 ax_h_t = fig2.add_subplot(323)
 ax_w_t = fig2.add_subplot(324)
 ax_hd_t = fig2.add_subplot(325)
+ax_states = fig2.add_subplot(326)
 ax_s_t.set_title("S-t")
 ax_h_t.set_title("Y2-t")
 ax_t_t.set_title("Theta-t")
 ax_w_t.set_title("Omega-t")
 ax_hd_t.set_title("v-t")
+ax_states.set_title("states")
 ax_s_t.plot(t, s, 'C1-')
 ax_t_t.plot(t, theta, 'C1-')
 ax_h_t.plot(t, Y2, 'C1-')
 ax_w_t.plot(t, a[:,1], 'C1-')
 ax_hd_t.plot(t, a[:,3]+r*a[:,1], 'C1-')
+ax_hd_t.grid()
+ax_states.plot(t, states, 'C1.')
+
 fig2.tight_layout()
 
-ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1000//fps, blit=False)
+ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1000//fps, blit=True)
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=60, metadata=dict(artist='Sanggyu Lee'), bitrate=1800)
+ani.save('looping.mp4', dpi=300, savefig_kwargs={'transparent':True, 'facecolor':'none'}, writer=writer)
+# ani.save('looping.mp4', codec="png",
+#          dpi=100, bitrate=-1,
+#          savefig_kwargs={'transparent': True, 'facecolor': 'none'}, writer=writer)
 plt.show()
