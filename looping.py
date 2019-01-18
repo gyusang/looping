@@ -1,17 +1,21 @@
 import numpy as np
-import pylab as pl
 
-L = 0.5 # in m
-M_m = 4
+ # in m
+M_m = 202.3/50.3
 mu = np.log(81/52)/np.pi
-mu_s = np.log(99/52)/np.pi
+# mu = np.log(4200/1009)/(3*np.pi)
+# mu = 0.15
+# mu_s = np.log(4763/1009)/(3*np.pi)
+# mu_s = 0.17
+mu_s = np.log(99/52)/np.pi - 0.02
 print("mu: %.2f, mu_s: %.2f"%(mu, mu_s))
-r = 0.023/2# in m
+r = 0.0188/2# in m
 
-g = 9.80665
+g = 9.78
 
-theta_0 = [np.pi/2, 0]
-s_0 = [L*0.99-r*theta_0[0], 0]
+theta_0 = [np.pi/2+np.deg2rad(5), 0]
+s_0 = [0.5, 0]
+L = 0.5+0.142+r*theta_0[0]
 steps_per_sec = 100000
 fps = 100
 
@@ -47,8 +51,8 @@ def loop_pen(state, moving):
         if T1_m <= T1_m_min:
             moving = 'CCW'
         elif T1_m >= T1_m_max:
+            print('Amazing!')
             moving = 'CW'
-            # TODO special analysis
         return moving, np.array([theta[1], theta_dd, s_d, s_dd])
 
 
@@ -60,7 +64,7 @@ def RK2(f,y0):
     y=y0
     t = 0
     moving = 'STOP'
-    while Y[-1][2] > 0.001 and Y[-1][0] >= 0:
+    while Y[-1][2] > 0 and Y[-1][0] >= 0:
         if t > 5 or moving == 'ERROR':
             print('quit!')
             break
@@ -84,39 +88,56 @@ def RK2(f,y0):
 
 # y_0 = np.array(theta_0 + s_0)
 a, t, states = RK2(loop_pen, np.array(theta_0 + s_0))
-a = a[::steps_per_sec//fps]
-t = t[::steps_per_sec//fps]
-states = states[::steps_per_sec//fps]
+skip_num = (steps_per_sec//fps)//8
+print(skip_num)
+last_num = (len(a)//skip_num)*skip_num
+a_last = a[last_num:]
+t_last = t[last_num:]
+states_last = states[last_num:]
+a = a[::skip_num]
+t = t[::skip_num]
+states = states[::skip_num]
+np.append(a, a_last)
+np.append(t, t_last),
+np.append(states, states_last)
+
 theta = a[:,0]
 s = a[:,2]
 X1 = r*np.cos(theta)-s*np.sin(theta)
 Y1 = r*np.sin(theta)+s*np.cos(theta)
 X2 = np.array([r]*len(a))
 Y2 = (s+r*theta)-L
-
+import matplotlib
+matplotlib.use('AGG')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 fig = plt.figure('Looping Pendulum')
 fig.patch.set_alpha(0.)
 ax = fig.gca()
-line1, = ax.plot(X1[:1],Y1[:1],'g-')
-line2, = ax.plot(X2[:1], Y2[:1], 'b-')
-dot1, = ax.plot(X1[:1],Y1[:1],'g.')
-dot2, = ax.plot(X2[:1], Y2[:1], 'b.')
+line1, = ax.plot(X1[:1],Y1[:1],'-', color='burlywood')
+line2, = ax.plot(X2[:1], Y2[:1], '-', color='burlywood')
+dot1, = ax.plot(X1[:1],Y1[:1],'g-')
+dot2, = ax.plot(X2[:1], Y2[:1], 'b-')
+dot3, = ax.plot(X1[:1],Y1[:1],'g.')
+dot4, = ax.plot(X2[:1], Y2[:1], 'b.')
 c = np.linspace(0, 2 * np.pi, 100)
-circle, = ax.plot(r * np.cos(c), r * np.sin(c), 'r-')
+circle, = ax.plot(r * np.cos(c), r * np.sin(c), '-', color='burlywood')
 
 
 def init():
-    line1.set_xdata([X1[0],r*np.cos(a[0,0])])
+    line1.set_xdata([-X1[0],-r*np.cos(a[0,0])])
     line1.set_ydata([Y1[0],r*np.sin(a[0,0])])
-    line2.set_xdata([X2[0],r])
+    line2.set_xdata([-X2[0],-r])
     line2.set_ydata([Y2[0],0])
-    dot1.set_xdata([X1[0]])
+    dot1.set_xdata([-X1[0]])
     dot1.set_ydata([Y1[0]])
-    dot2.set_xdata([X2[0]])
+    dot2.set_xdata([-X2[0]])
     dot2.set_ydata([Y2[0]])
-    return line1, line2, dot1, dot2, circle
+    dot3.set_xdata([-X1[0]])
+    dot3.set_ydata([Y1[0]])
+    dot4.set_xdata([-X2[0]])
+    dot4.set_ydata([Y2[0]])
+    return line1, line2, dot1, dot2, dot3, dot4, circle
 
 
 def animate(i):
@@ -124,11 +145,15 @@ def animate(i):
     line1.set_ydata([Y1[i], r * np.sin(theta[i])])
     line2.set_xdata([-X2[i], -r])
     line2.set_ydata([Y2[i], 0])
-    dot1.set_xdata([-X1[i]])
-    dot1.set_ydata([Y1[i]])
-    dot2.set_xdata([-X2[i]])
-    dot2.set_ydata([Y2[i]])
-    return line1, line2, dot1, dot2, circle
+    dot1.set_xdata(-X1[:i])
+    dot1.set_ydata(Y1[:i])
+    dot2.set_xdata(-X2[:i])
+    dot2.set_ydata(Y2[:i])
+    dot3.set_xdata([-X1[i]])
+    dot3.set_ydata([Y1[i]])
+    dot4.set_xdata([-X2[i]])
+    dot4.set_ydata([Y2[i]])
+    return line1, line2, dot1, dot2, dot3, dot4, circle
 
 
 init()
@@ -136,9 +161,10 @@ plt.axis('equal')
 ax.relim()
 xl = ax.get_xlim()
 yl = ax.get_ylim()
-ax.set_xlim((xl[0],-xl[0]))
-ax.set_ylim((yl[0],-yl[0]))
-
+# ax.set_xlim((xl[0],-xl[0]))
+# ax.set_ylim((yl[0],-yl[0]))
+ax.set_xlim((-0.45, 0.6))
+ax.set_ylim((-0.5, 0.3))
 fig2 = plt.figure('Graphs')
 ax_s_t = fig2.add_subplot(321)
 ax_t_t = fig2.add_subplot(322)
@@ -162,11 +188,11 @@ ax_states.plot(t, states, 'C1.')
 
 fig2.tight_layout()
 
-ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1000//fps, blit=True)
+ani = animation.FuncAnimation(fig, animate, range(len(a)), init_func=init, interval=1, blit=True)
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=60, metadata=dict(artist='Sanggyu Lee'), bitrate=1800)
-ani.save('looping.mp4', dpi=300, savefig_kwargs={'transparent':True, 'facecolor':'none'}, writer=writer)
+writer = Writer(fps=fps, metadata=dict(artist='Sanggyu Lee'), bitrate=1800)
+ani.save('looping(%d).mp4'%fps, dpi=300, savefig_kwargs={'transparent':True, 'facecolor':'none'}, writer=writer)
 # ani.save('looping.mp4', codec="png",
 #          dpi=100, bitrate=-1,
 #          savefig_kwargs={'transparent': True, 'facecolor': 'none'}, writer=writer)
-plt.show()
+# plt.show()
